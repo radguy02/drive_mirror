@@ -6,6 +6,10 @@ venv/
 credentials.json
 token.json
 
+# Drive Mirror metadata
+.drive/
+*.drivepart
+
 # Python Cache
 __pycache__/
 *.pyc
@@ -19,3 +23,6 @@ __pycache__/
 # OS Files
 .DS_Store
 Thumbs.db
+
+#test folders/files
+test/*
