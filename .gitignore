@@ -9,6 +9,7 @@ token.json
 # Drive Mirror metadata
 .drive/
 *.drivepart
+drive_mirror.egg-info/
 
 # Python Cache
 __pycache__/
