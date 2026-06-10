@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "drive-mirror"
+version = "0.1.0"
+description = "Mirror a local folder to a Google Drive folder."
+requires-python = ">=3.10"
+dependencies = [
+  "google-api-python-client>=2.0.0",
+  "google-auth-httplib2>=0.2.0",
+  "google-auth-oauthlib>=1.0.0",
+]
+
+[project.scripts]
+drive = "drive_mirror.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["drive_mirror*"]

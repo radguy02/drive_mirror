@@ -1,0 +1,13 @@
+.drive/
+.git/
+.agents/
+.codex/
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+credentials.json
+token.json
