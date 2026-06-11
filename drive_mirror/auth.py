@@ -10,8 +10,53 @@ from .metadata import read_json
 CONFIG_DIR = Path.home() / ".config" / "drive-mirror"
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
-TOKEN_PATH = CONFIG_DIR / TOKEN_NAME
+ACCOUNTS_DIR = CONFIG_DIR / "accounts"
+GLOBAL_CONFIG_PATH = CONFIG_DIR / "config.json"
 CREDENTIALS_PATH = CONFIG_DIR / CREDENTIALS_NAME
+
+
+def get_active_account() -> str:
+    if not GLOBAL_CONFIG_PATH.exists():
+        return "default"
+    try:
+        import json
+        with open(GLOBAL_CONFIG_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data.get("active_account", "default")
+    except Exception:
+        return "default"
+
+
+def set_active_account(name: str) -> None:
+    import json
+    data = {}
+    if GLOBAL_CONFIG_PATH.exists():
+        try:
+            with open(GLOBAL_CONFIG_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            pass
+    data["active_account"] = name
+    with open(GLOBAL_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4)
+
+
+def migrate_old_token() -> None:
+    old_token_path = CONFIG_DIR / TOKEN_NAME
+    if old_token_path.exists() and not ACCOUNTS_DIR.exists():
+        ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
+        default_token_path = ACCOUNTS_DIR / "default.json"
+        old_token_path.rename(default_token_path)
+        set_active_account("default")
+    else:
+        ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def get_token_path(account: str | None = None) -> Path:
+    migrate_old_token()
+    if account is None:
+        account = get_active_account()
+    return ACCOUNTS_DIR / f"{account}.json"
 
 
 def import_google_api() -> dict[str, Any]:
@@ -83,9 +128,10 @@ def token_file_has_requested_scopes(token_path: Path) -> bool:
     return set(SCOPES).issubset(token_scopes)
 
 
-def load_credentials(root: Path, force_login: bool = False) -> Any:
+def load_credentials(root: Path, force_login: bool = False, account: str | None = None) -> Any:
     google = import_google_api()
-    token_path = TOKEN_PATH
+    token_path = get_token_path(account)
+
     creds = None
 
     if token_path.exists() and not force_login and token_file_has_requested_scopes(token_path):

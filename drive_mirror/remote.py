@@ -221,7 +221,7 @@ def upload_file(
                 fields="id,name,mimeType,modifiedTime,size,md5Checksum,parents",
                 supportsAllDrives=True,
             )
-            .execute()
+            .execute(num_retries=3)
         )
     else:
         metadata = (
@@ -232,7 +232,7 @@ def upload_file(
                 fields="id,name,mimeType,modifiedTime,size,md5Checksum,parents",
                 supportsAllDrives=True,
             )
-            .execute()
+            .execute(num_retries=3)
         )
 
     entry = remote_file_entry(metadata, rel_path, parent_id)
@@ -257,5 +257,5 @@ def download_file(service: Any, remote_file: dict[str, Any], destination: Path) 
         downloader = google["MediaIoBaseDownload"](fh, request)
         done = False
         while not done:
-            _, done = downloader.next_chunk()
+            _, done = downloader.next_chunk(num_retries=3)
     tmp_path.replace(destination)

@@ -5,6 +5,11 @@ import sys
 
 from .auth import import_google_api
 from .commands import (
+    cmd_auth_add,
+    cmd_auth_current,
+    cmd_auth_list,
+    cmd_auth_remove,
+    cmd_auth_use,
     cmd_clone,
     cmd_info,
     cmd_init,
@@ -18,13 +23,40 @@ from .errors import DriveMirrorError
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="drive", description="Mirror a folder to Google Drive.")
+    parser = argparse.ArgumentParser(
+        prog="drive",
+        description="Mirror a folder to Google Drive.\n\n"
+                    "Includes multi-account support: use `drive auth <add|list|use|current|remove>` "
+                    "to manage and switch between different Google Drive accounts.",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     subparsers = parser.add_subparsers(dest="command")
 
     login = subparsers.add_parser("login", help="Authenticate with Google Drive.")
     login.add_argument("--force", action="store_true", help="Run OAuth even if token.json exists.")
     login.add_argument("--limit", type=int, default=10, help="Number of files to list for verification.")
     login.set_defaults(func=cmd_login)
+
+    auth = subparsers.add_parser("auth", help="Manage multiple Google Drive accounts (add, list, use, current, remove).")
+    auth_subs = auth.add_subparsers(dest="auth_command", required=True)
+
+    auth_add = auth_subs.add_parser("add", help="Add a new account.")
+    auth_add.add_argument("name", help="Name of the account to add.")
+    auth_add.set_defaults(func=cmd_auth_add)
+
+    auth_list = auth_subs.add_parser("list", help="List available accounts.")
+    auth_list.set_defaults(func=cmd_auth_list)
+
+    auth_use = auth_subs.add_parser("use", help="Switch the active account.")
+    auth_use.add_argument("name", help="Name of the account to use.")
+    auth_use.set_defaults(func=cmd_auth_use)
+
+    auth_current = auth_subs.add_parser("current", help="Show the current active account.")
+    auth_current.set_defaults(func=cmd_auth_current)
+
+    auth_remove = auth_subs.add_parser("remove", help="Remove an account.")
+    auth_remove.add_argument("name", help="Name of the account to remove.")
+    auth_remove.set_defaults(func=cmd_auth_remove)
 
     init = subparsers.add_parser("init", help="Initialize the current folder as a Drive repository.")
     init.add_argument("--name", help="Name for the remote Drive folder.")
@@ -91,6 +123,10 @@ def main(argv: list[str] | None = None) -> int:
             pass
         if google_error and isinstance(exc, google_error):
             print(f"Google Drive API error: {exc}", file=sys.stderr)
+            return 1
+        import socket
+        if isinstance(exc, (ConnectionError, TimeoutError, socket.error)):
+            print(f"Network error: {exc}", file=sys.stderr)
             return 1
         raise
 

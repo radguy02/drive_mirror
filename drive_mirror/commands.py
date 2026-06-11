@@ -4,7 +4,14 @@ import argparse
 import re
 from pathlib import Path
 
-from .auth import build_drive_service
+from .auth import (
+    build_drive_service,
+    load_credentials,
+    get_active_account,
+    set_active_account,
+    ACCOUNTS_DIR,
+    get_token_path,
+)
 from .constants import (
     APP_NAME,
     CACHE_NAME,
@@ -78,7 +85,7 @@ def cmd_login(args: argparse.Namespace) -> int:
     )
 
     print(f"Authenticated as {display_name} <{email}>")
-    print(f"Saved token: {root / TOKEN_NAME}")
+    print(f"Saved token: {get_token_path()}")
     print("Drive API access verified.")
     files = response.get("files", [])
     if files:
@@ -88,6 +95,85 @@ def cmd_login(args: argparse.Namespace) -> int:
             print(f"  {item.get('name', '(unnamed)')}{marker}  {item.get('id')}")
     else:
         print("No Drive files were returned.")
+    return 0
+
+
+def cmd_auth_add(args: argparse.Namespace) -> int:
+    root = Path.cwd()
+    account_name = args.name
+    # Force login for the specific account
+    # We do this by calling load_credentials with force_login=True and the given account
+    creds = load_credentials(root, force_login=True, account=account_name)
+    if not creds:
+        print("Failed to authenticate.")
+        return 1
+    
+    print(f"Successfully authenticated and saved token for account: {account_name}")
+    # Switch to this new account automatically
+    set_active_account(account_name)
+    print(f"Switched active account to: {account_name}")
+    return 0
+
+
+def cmd_auth_list(args: argparse.Namespace) -> int:
+    # Ensure migration has run by calling get_token_path
+    get_token_path()
+    active = get_active_account()
+    
+    accounts = []
+    if ACCOUNTS_DIR.exists():
+        for path in ACCOUNTS_DIR.iterdir():
+            if path.suffix == ".json":
+                accounts.append(path.stem)
+                
+    if not accounts:
+        print("No accounts configured.")
+        return 0
+        
+    for acc in sorted(accounts):
+        marker = "*" if acc == active else " "
+        print(f"{marker} {acc}")
+    return 0
+
+
+def cmd_auth_use(args: argparse.Namespace) -> int:
+    account_name = args.name
+    target_path = ACCOUNTS_DIR / f"{account_name}.json"
+    if not target_path.exists():
+        raise DriveMirrorError(f"Account '{account_name}' does not exist. Add it with `drive auth add {account_name}` first.")
+    
+    set_active_account(account_name)
+    print(f"Switched active account to: {account_name}")
+    return 0
+
+
+def cmd_auth_current(args: argparse.Namespace) -> int:
+    active = get_active_account()
+    print(f"Current account: {active}")
+    return 0
+
+
+def cmd_auth_remove(args: argparse.Namespace) -> int:
+    account_name = args.name
+    target_path = ACCOUNTS_DIR / f"{account_name}.json"
+    active = get_active_account()
+    
+    if not target_path.exists():
+        print(f"Account '{account_name}' does not exist.")
+        return 1
+        
+    if account_name == active:
+        # Check if there are other accounts
+        accounts = [p.stem for p in ACCOUNTS_DIR.iterdir() if p.suffix == ".json"]
+        if len(accounts) > 1:
+            raise DriveMirrorError(f"Cannot remove the active account. Switch to another account first using `drive auth use <name>`.")
+        else:
+            # It's the only account, so deleting it is okay
+            target_path.unlink()
+            print(f"Removed account: {account_name}")
+    else:
+        target_path.unlink()
+        print(f"Removed account: {account_name}")
     return 0
 
 
