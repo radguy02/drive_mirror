@@ -18,6 +18,11 @@ From the project folder, run:
 
 ```bash
 ./drive login
+./drive auth add <name>
+./drive auth list
+./drive auth use <name>
+./drive auth current
+./drive auth remove <name>
 ./drive init
 ./drive status
 ./drive push
@@ -27,6 +32,20 @@ From the project folder, run:
 ```
 
 If you install or symlink the executable into your `PATH`, the same commands work as `drive login`, `drive push`, and so on.
+
+## Multi-Account Support
+
+Drive Mirror supports authenticating and switching between multiple Google Drive accounts.
+
+```bash
+./drive auth add personal
+./drive auth list
+./drive auth use personal
+./drive auth current
+./drive auth remove default
+```
+
+Tokens for each account are stored securely in `~/.config/drive-mirror/accounts/`, and the active account configuration is saved in `~/.config/drive-mirror/config.json`.
 
 ## Project Layout
 
