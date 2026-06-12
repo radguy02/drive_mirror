@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .auth import import_google_api
 from .constants import DRIVE_FOLDER_MIME
@@ -203,16 +203,17 @@ def upload_file(
     root: Path,
     rel_path: str,
     remote_index: RemoteIndex,
+    progress_callback: Callable[[int, int | None], None] | None = None,
 ) -> dict[str, Any]:
     google = import_google_api()
     local_path = root / rel_path
     folder_path, filename = os.path.split(rel_path)
     parent_id = ensure_remote_folder(service, remote_index, folder_path)
-    media = google["MediaFileUpload"](str(local_path), resumable=True)
+    media = google["MediaFileUpload"](str(local_path), resumable=True, chunksize=1024 * 1024)
 
     existing = remote_index.files.get(rel_path) or find_child(service, parent_id, filename)
     if existing:
-        metadata = (
+        request = (
             service.files()
             .update(
                 fileId=existing["id"],
@@ -221,10 +222,9 @@ def upload_file(
                 fields="id,name,mimeType,modifiedTime,size,md5Checksum,parents",
                 supportsAllDrives=True,
             )
-            .execute(num_retries=3)
         )
     else:
-        metadata = (
+        request = (
             service.files()
             .create(
                 body={"name": filename, "parents": [parent_id]},
@@ -232,10 +232,18 @@ def upload_file(
                 fields="id,name,mimeType,modifiedTime,size,md5Checksum,parents",
                 supportsAllDrives=True,
             )
-            .execute(num_retries=3)
         )
 
-    entry = remote_file_entry(metadata, rel_path, parent_id)
+    response = None
+    while response is None:
+        status, response = request.next_chunk(num_retries=3)
+        if status and progress_callback:
+            progress_callback(status.resumable_progress, status.total_size)
+            
+    if progress_callback and media.size() is not None:
+        progress_callback(media.size(), media.size())
+
+    entry = remote_file_entry(response, rel_path, parent_id)
     remote_index.files[rel_path] = entry
     return entry
 
@@ -248,14 +256,21 @@ def trash_remote_file(service: Any, file_id: str) -> None:
     )
 
 
-def download_file(service: Any, remote_file: dict[str, Any], destination: Path) -> None:
+def download_file(
+    service: Any, 
+    remote_file: dict[str, Any], 
+    destination: Path,
+    progress_callback: Callable[[int, int | None], None] | None = None,
+) -> None:
     google = import_google_api()
     destination.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = destination.with_name(destination.name + ".drivepart")
     request = service.files().get_media(fileId=remote_file["id"], supportsAllDrives=True)
     with io.FileIO(tmp_path, "wb") as fh:
-        downloader = google["MediaIoBaseDownload"](fh, request)
+        downloader = google["MediaIoBaseDownload"](fh, request, chunksize=1024 * 1024)
         done = False
         while not done:
-            _, done = downloader.next_chunk(num_retries=3)
+            status, done = downloader.next_chunk(num_retries=3)
+            if status and progress_callback:
+                progress_callback(status.resumable_progress, status.total_size)
     tmp_path.replace(destination)

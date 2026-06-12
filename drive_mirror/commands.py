@@ -37,7 +37,7 @@ from .metadata import (
     utc_now,
     write_json,
 )
-from .output import format_size, print_path_group
+from .output import format_size, print_path_group, TransferTracker
 from .remote import (
     create_drive_folder,
     download_file,
@@ -273,9 +273,15 @@ def cmd_push(args: argparse.Namespace) -> int:
 
     uploaded = 0
     for rel_path in upload_paths:
-        upload_file(service, root, rel_path, remote_index)
-        uploaded += 1
-        print(f"Uploaded: {rel_path}")
+        tracker = TransferTracker(rel_path, "up")
+        try:
+            upload_file(service, root, rel_path, remote_index, tracker.update)
+            total_size = local_files.get(rel_path, {}).get("size")
+            tracker.complete(total_size)
+            uploaded += 1
+        except Exception:
+            tracker.fail()
+            raise
 
     deleted = 0
     if not args.no_delete:
@@ -368,8 +374,13 @@ def cmd_pull(args: argparse.Namespace) -> int:
             if args.dry_run:
                 print(f"Would download: {rel_path}")
             else:
-                download_file(service, remote_file, root / rel_path)
-                print(f"Downloaded: {rel_path}")
+                tracker = TransferTracker(rel_path, "down")
+                try:
+                    download_file(service, remote_file, root / rel_path, tracker.update)
+                    tracker.complete(remote_file.get("size"))
+                except Exception:
+                    tracker.fail()
+                    raise
 
     if args.dry_run:
         print_path_group("Conflicts", sorted(conflict_paths))
@@ -504,9 +515,14 @@ def cmd_clone(args: argparse.Namespace) -> int:
         if remote_file.get("mime_type", "").startswith(GOOGLE_APPS_PREFIX):
             skipped_workspace.append(rel_path)
             continue
-        download_file(service, remote_file, target / rel_path)
-        downloaded += 1
-        print(f"Downloaded: {rel_path}")
+        tracker = TransferTracker(rel_path, "down")
+        try:
+            download_file(service, remote_file, target / rel_path, tracker.update)
+            tracker.complete(remote_file.get("size"))
+            downloaded += 1
+        except Exception:
+            tracker.fail()
+            raise
 
     config = {
         "version": 1,

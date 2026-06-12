@@ -25,5 +25,5 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-#test folders/files
+# Test folders/files
 test/*
